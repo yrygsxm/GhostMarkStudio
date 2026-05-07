@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120" fill="none">
+  <g opacity="0.95">
+    <rect x="35" y="18" width="58" height="76" rx="14" stroke="#102238" stroke-width="8"/>
+    <circle cx="64" cy="73" r="7" fill="#102238"/>
+    <rect x="51" y="31" width="26" height="9" rx="4.5" fill="#102238"/>
+    <path d="M96 33c22 12 33 30 33 52" stroke="#102238" stroke-width="7" stroke-linecap="round"/>
+    <path d="M111 32l15 3-3 15" stroke="#102238" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="130" cy="84" r="22" fill="#F26322"/>
+    <path d="M121 83l8 8 17-20" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="154" y="55" fill="#102238" font-family="Avenir Next, PingFang SC, sans-serif" font-size="42" font-weight="900" letter-spacing="1">APPDO</text>
+    <text x="157" y="86" fill="#102238" font-family="PingFang SC, Hiragino Sans GB, sans-serif" font-size="25" font-weight="800" letter-spacing="3">数字生活指南</text>
+  </g>
+</svg>

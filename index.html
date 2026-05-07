@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>APPDO 暗水印工作台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">APPDO Watermark Lab</p>
+          <h1>可视化暗水印生成与解析</h1>
+          <p class="hero-copy">
+            上传图片后写入固定暗水印：<strong>https://t.me/AppDoDo/</strong> 与
+            <strong>APPDO数字生活指南</strong>。可选择叠加低透明度的可视 APPDO 水印，再导出图片。
+          </p>
+        </div>
+        <div class="hero-card">
+          <span>抗压缩策略</span>
+          <strong>DWT/DCT 频域嵌入</strong>
+          <p>底层使用 ShieldMnt/invisible-watermark。默认 dwtDctSvd 写入亮度+色度通道，解析端自动尝试常用参数。</p>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="step">流程 1</p>
+              <h2>提交图片并生成水印</h2>
+            </div>
+            <button class="ghost" id="generateBtn" type="button">重新生成</button>
+          </div>
+
+          <label class="dropzone" id="generatorDropzone">
+            <input id="generatorFile" type="file" accept="image/*" />
+            <span>拖入或选择图片</span>
+            <small>支持 PNG、JPEG、WebP；导出前会在浏览器本地处理。</small>
+          </label>
+
+          <div class="controls">
+            <label>
+              暗水印强度（scale）
+              <input id="hiddenStrength" type="range" min="24" max="72" step="6" value="36" />
+              <output id="hiddenStrengthValue">36</output>
+            </label>
+            <label>
+              底层算法
+              <select id="hiddenMethod">
+                <option value="dwtDctSvd" selected>dwtDctSvd（推荐抗压缩）</option>
+                <option value="dwtDct">dwtDct（更快）</option>
+              </select>
+            </label>
+            <label>
+              导出最长边
+              <select id="outputMaxSide">
+                <option value="1600">1600px SNS 推荐</option>
+                <option value="2048" selected>2048px 高清推荐</option>
+                <option value="2560">2560px</option>
+                <option value="original">原图（最大 4096px）</option>
+              </select>
+            </label>
+            <label class="check">
+              <input id="snsMode" type="checkbox" checked />
+              <span>SNS 压缩增强（亮度+色度通道）</span>
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="controls visual-controls">
+            <label class="check">
+              <input id="visibleEnabled" type="checkbox" checked />
+              <span>叠加可视透明水印</span>
+            </label>
+            <label>
+              可视水印透明度
+              <input id="visibleOpacity" type="range" min="2" max="18" step="1" value="7" />
+              <output id="visibleOpacityValue">7%</output>
+            </label>
+            <label>
+              可视水印大小
+              <input id="visibleSize" type="range" min="8" max="24" step="1" value="13" />
+              <output id="visibleSizeValue">13%</output>
+            </label>
+          </div>
+
+          <p class="status" id="generatorStatus">等待上传图片。</p>
+
+          <div class="preview-pair">
+            <figure>
+              <figcaption>原图预览</figcaption>
+              <canvas id="sourceCanvas"></canvas>
+            </figure>
+            <figure>
+              <figcaption>导出预览</figcaption>
+              <canvas id="outputCanvas"></canvas>
+            </figure>
+          </div>
+
+          <div class="actions">
+            <button id="downloadJpegBtn" type="button">下载 JPEG</button>
+            <button id="downloadPngBtn" class="secondary" type="button">下载 PNG</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="step">流程 2</p>
+              <h2>解析暗水印图片</h2>
+            </div>
+            <button class="ghost" id="decodeBtn" type="button">解析</button>
+          </div>
+
+          <label class="dropzone" id="decodeDropzone">
+            <input id="decodeFile" type="file" accept="image/*" />
+            <span>上传需要解析的图片</span>
+            <small>后台使用 ShieldMnt/invisible-watermark 解码并显示文本。</small>
+          </label>
+
+          <div class="controls">
+            <label>
+              解析 scale
+              <input id="decodeStrength" type="range" min="24" max="72" step="6" value="36" />
+              <output id="decodeStrengthValue">36</output>
+            </label>
+            <label>
+              解析算法
+              <select id="decodeMethod">
+                <option value="auto" selected>自动尝试</option>
+                <option value="dwtDct">dwtDct</option>
+                <option value="dwtDctSvd">dwtDctSvd</option>
+              </select>
+            </label>
+          </div>
+
+          <p class="status" id="decodeStatus">等待上传需要解析的图片。</p>
+
+          <div class="preview-stack">
+            <figure>
+              <figcaption>待解析图片</figcaption>
+              <canvas id="decodeSourceCanvas"></canvas>
+            </figure>
+            <section class="decode-result" id="decodeResult">
+              <p class="result-label">解码文本</p>
+              <strong id="decodedText">等待解析。</strong>
+              <p class="result-label">目标文本</p>
+              <code id="expectedText">https://t.me/AppDoDo/  APPDO数字生活指南</code>
+              <small id="decodeMeta"></small>
+            </section>
+          </div>
+
+          <div class="actions">
+            <button id="copyDecodedBtn" type="button">复制解码文本</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="notes">
+        <h2>使用说明</h2>
+        <p>
+          暗水印不是不可破坏的版权 DRM。若平台强裁切、重绘、加厚滤镜或大幅缩小，任何开源水印方案都会下降。
+          当前底层暗水印使用开源项目 ShieldMnt/invisible-watermark 的 DWT/DCT 频域算法。它对 JPEG 压缩更稳，但对强缩放、裁切、旋转和大面积纯色海报仍有天然限制。
+        </p>
+      </section>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
