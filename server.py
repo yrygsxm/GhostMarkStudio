@@ -12,9 +12,8 @@ from PIL import Image, ImageOps
 
 
 BASE_DIR = Path(__file__).resolve().parent
-WATERMARK_TEXT = "https://t.me/AppDoDo/  APPDO数字生活指南"
-WATERMARK_BYTES = WATERMARK_TEXT.encode("utf-8")
-WATERMARK_BITS = len(WATERMARK_BYTES) * 8
+DEFAULT_WATERMARK_TEXT = "https://t.me/AppDoDo/  APPDO数字生活指南"
+MAX_WATERMARK_BYTES = 128
 MAX_SIDE = 4096
 DEFAULT_SCALE = 36
 DEFAULT_METHOD = "dwtDctSvd"
@@ -35,8 +34,8 @@ def health():
         {
             "ok": True,
             "library": "invisible-watermark",
-            "watermark_text": WATERMARK_TEXT,
-            "watermark_bits": WATERMARK_BITS,
+            "default_watermark_text": DEFAULT_WATERMARK_TEXT,
+            "max_watermark_bytes": MAX_WATERMARK_BYTES,
         }
     )
 
@@ -51,13 +50,17 @@ def encode_image():
     scale = normalize_scale(request.form.get("scale", DEFAULT_SCALE))
     max_side = normalize_max_side(request.form.get("max_side", "2048"))
     sns_mode = request.form.get("sns_mode", "true").lower() == "true"
+    _watermark_text, watermark_bytes, watermark_bits = normalize_watermark_text(
+        request.form.get("watermark_text", DEFAULT_WATERMARK_TEXT)
+    )
     bgr, width, height = load_bgr(upload)
 
-    bgr = resize_for_encode(bgr, max_side=max_side, sns_mode=sns_mode)
+    bgr = resize_for_encode(bgr, max_side=max_side, sns_mode=sns_mode, watermark_bits=watermark_bits)
+    ensure_capacity(bgr, sns_mode=sns_mode, watermark_bits=watermark_bits)
     scales = build_scales(scale, sns_mode=sns_mode)
 
     encoder = WatermarkEncoder()
-    encoder.set_watermark("bytes", WATERMARK_BYTES)
+    encoder.set_watermark("bytes", watermark_bytes)
     encoded = encoder.encode(bgr, method, scales=scales)
     encoded = np.clip(encoded, 0, 255).astype(np.uint8)
 
@@ -69,9 +72,10 @@ def encode_image():
         io.BytesIO(output.tobytes()),
         mimetype="image/png",
         as_attachment=False,
-        download_name="appdo-watermarked.png",
+        download_name="ghostmark-watermarked.png",
     )
-    response.headers["X-Watermark-Bits"] = str(WATERMARK_BITS)
+    response.headers["X-Watermark-Bits"] = str(watermark_bits)
+    response.headers["X-Watermark-Bytes"] = str(len(watermark_bytes))
     response.headers["X-Watermark-Method"] = method
     response.headers["X-Watermark-Scale"] = str(scale)
     response.headers["X-Watermark-Scales"] = ",".join(str(item) for item in scales)
@@ -88,20 +92,24 @@ def decode_image():
 
     preferred_method = request.form.get("method", "auto")
     preferred_scale = normalize_scale(request.form.get("scale", DEFAULT_SCALE))
+    expected_text, expected_bytes, expected_bits = normalize_watermark_text(
+        request.form.get("expected_text", DEFAULT_WATERMARK_TEXT)
+    )
     bgr, width, height = load_bgr(upload)
-    best = decode_best_effort(bgr, preferred_method, preferred_scale)
+    best = decode_best_effort(bgr, preferred_method, preferred_scale, expected_bytes)
 
     return jsonify(
         {
             "decoded_text": best["decoded_text"],
-            "expected_text": WATERMARK_TEXT,
+            "expected_text": expected_text,
             "exact_match": best["exact_match"],
             "bit_similarity": best["bit_similarity"],
             "byte_similarity": best["byte_similarity"],
             "method": best["method"],
             "scale": best["scale"],
             "scales": best["scales"],
-            "watermark_bits": WATERMARK_BITS,
+            "watermark_bits": expected_bits,
+            "watermark_bytes": len(expected_bytes),
             "image_size": {"width": width, "height": height},
         }
     )
@@ -137,12 +145,12 @@ def load_bgr(upload) -> tuple[np.ndarray, int, int]:
     return bgr, width, height
 
 
-def resize_for_encode(bgr: np.ndarray, max_side: int, sns_mode: bool) -> np.ndarray:
+def resize_for_encode(bgr: np.ndarray, max_side: int, sns_mode: bool, watermark_bits: int) -> np.ndarray:
     height, width = bgr.shape[:2]
     long_side = max(width, height)
     capacity = watermark_capacity(width, height, sns_mode=sns_mode)
     target_repeats = 10 if sns_mode else 4
-    target_blocks = WATERMARK_BITS * target_repeats
+    target_blocks = watermark_bits * target_repeats
 
     scale = 1.0
     if capacity < target_blocks:
@@ -173,24 +181,35 @@ def watermark_capacity(width: int, height: int, sns_mode: bool) -> int:
     return (width // 16) * (height // 16) * active_channels
 
 
+def ensure_capacity(bgr: np.ndarray, sns_mode: bool, watermark_bits: int) -> None:
+    height, width = bgr.shape[:2]
+    capacity = watermark_capacity(width, height, sns_mode=sns_mode)
+    if capacity < watermark_bits:
+        abort(
+            400,
+            "watermark text is too long for this image size; shorten the text or increase the output size",
+        )
+
+
 def build_scales(scale: int, sns_mode: bool) -> list[int]:
     if sns_mode:
         return [scale, scale, 0]
     return [0, scale, 0]
 
 
-def decode_best_effort(bgr: np.ndarray, preferred_method: str, preferred_scale: int) -> dict:
+def decode_best_effort(bgr: np.ndarray, preferred_method: str, preferred_scale: int, watermark_bytes: bytes) -> dict:
     candidates = []
     methods = ["dwtDct", "dwtDctSvd"] if preferred_method == "auto" else [normalize_method(preferred_method)]
     scales = unique([preferred_scale, DEFAULT_SCALE, 42, 48, 54])
+    watermark_bits = len(watermark_bytes) * 8
 
     for method in methods:
         for scale in scales:
             for scale_vector in ([scale, scale, 0], [0, scale, 0]):
                 try:
-                    decoder = WatermarkDecoder("bytes", WATERMARK_BITS)
+                    decoder = WatermarkDecoder("bytes", watermark_bits)
                     decoded = decoder.decode(bgr, method, scales=scale_vector)
-                    candidates.append(score_candidate(decoded, method, scale, scale_vector))
+                    candidates.append(score_candidate(decoded, method, scale, scale_vector, watermark_bytes))
                 except Exception as exc:
                     candidates.append(
                         {
@@ -208,25 +227,37 @@ def decode_best_effort(bgr: np.ndarray, preferred_method: str, preferred_scale: 
     return max(candidates, key=lambda item: (item["exact_match"], item["bit_similarity"], item["byte_similarity"]))
 
 
-def score_candidate(decoded: bytes, method: str, scale: int, scale_vector: list[int]) -> dict:
+def score_candidate(decoded: bytes, method: str, scale: int, scale_vector: list[int], watermark_bytes: bytes) -> dict:
     decoded = bytes(decoded)
-    byte_matches = sum(left == right for left, right in zip(decoded, WATERMARK_BYTES))
-    byte_similarity = byte_matches / len(WATERMARK_BYTES)
+    byte_matches = sum(left == right for left, right in zip(decoded, watermark_bytes))
+    byte_similarity = byte_matches / len(watermark_bytes)
 
-    expected_bits = np.unpackbits(np.frombuffer(WATERMARK_BYTES, dtype=np.uint8))
-    decoded_bits = np.unpackbits(np.frombuffer(decoded[: len(WATERMARK_BYTES)].ljust(len(WATERMARK_BYTES), b"\x00"), dtype=np.uint8))
+    expected_bits = np.unpackbits(np.frombuffer(watermark_bytes, dtype=np.uint8))
+    decoded_bits = np.unpackbits(np.frombuffer(decoded[: len(watermark_bytes)].ljust(len(watermark_bytes), b"\x00"), dtype=np.uint8))
     bit_similarity = float(np.mean(expected_bits == decoded_bits))
 
     return {
         "decoded_bytes": decoded,
         "decoded_text": decoded.decode("utf-8", errors="replace"),
-        "exact_match": decoded == WATERMARK_BYTES,
+        "exact_match": decoded == watermark_bytes,
         "bit_similarity": round(bit_similarity, 4),
         "byte_similarity": round(byte_similarity, 4),
         "method": method,
         "scale": scale,
         "scales": scale_vector,
     }
+
+
+def normalize_watermark_text(value: str | None) -> tuple[str, bytes, int]:
+    text = DEFAULT_WATERMARK_TEXT if value is None else value.strip()
+    if not text:
+        abort(400, "watermark text is required")
+
+    watermark_bytes = text.encode("utf-8")
+    if len(watermark_bytes) > MAX_WATERMARK_BYTES:
+        abort(400, f"watermark text is too long; keep it within {MAX_WATERMARK_BYTES} UTF-8 bytes")
+
+    return text, watermark_bytes, len(watermark_bytes) * 8
 
 
 def normalize_method(value: str) -> str:

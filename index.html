@@ -13,8 +13,8 @@
           <p class="eyebrow">APPDO Watermark Lab</p>
           <h1>可视化暗水印生成与解析</h1>
           <p class="hero-copy">
-            上传图片后写入固定暗水印：<strong>https://t.me/AppDoDo/</strong> 与
-            <strong>APPDO数字生活指南</strong>。可选择叠加低透明度的可视 APPDO 水印，再导出图片。
+            上传图片后写入自定义暗水印内容，可选择叠加低透明度的可视 APPDO 水印，再导出图片。
+            解析时填写同一段内容用于确定解码长度并校验结果。
           </p>
         </div>
         <div class="hero-card">
@@ -41,6 +41,11 @@
           </label>
 
           <div class="controls">
+            <label class="wide">
+              暗水印内容
+              <textarea id="watermarkText" rows="3">https://t.me/AppDoDo/  APPDO数字生活指南</textarea>
+              <small id="watermarkTextMeta"></small>
+            </label>
             <label>
               暗水印强度（scale）
               <input id="hiddenStrength" type="range" min="24" max="72" step="6" value="36" />
@@ -122,6 +127,11 @@
           </label>
 
           <div class="controls">
+            <label class="wide">
+              预期暗水印内容
+              <textarea id="decodeExpectedText" rows="3">https://t.me/AppDoDo/  APPDO数字生活指南</textarea>
+              <small id="decodeExpectedMeta"></small>
+            </label>
             <label>
               解析 scale
               <input id="decodeStrength" type="range" min="24" max="72" step="6" value="36" />

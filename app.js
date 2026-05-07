@@ -1,8 +1,10 @@
 "use strict";
 
-const HIDDEN_WATERMARK_TEXT = "https://t.me/AppDoDo/  APPDO数字生活指南";
+const DEFAULT_WATERMARK_TEXT = "https://t.me/AppDoDo/  APPDO数字生活指南";
+const MAX_WATERMARK_BYTES = 128;
 const MAX_ORIGINAL_SIDE = 4096;
 const JPEG_QUALITY = 0.92;
+const textEncoder = new TextEncoder();
 
 const state = {
   generatorImage: null,
@@ -21,9 +23,13 @@ document.addEventListener("DOMContentLoaded", () => {
   setupUpload("generatorFile", "generatorDropzone", handleGeneratorFile);
   setupUpload("decodeFile", "decodeDropzone", handleDecodeFile);
 
+  $("watermarkText").value ||= DEFAULT_WATERMARK_TEXT;
+  $("decodeExpectedText").value ||= DEFAULT_WATERMARK_TEXT;
   bindRangeValue("hiddenStrength", "hiddenStrengthValue", "");
   bindRangeValue("visibleOpacity", "visibleOpacityValue", "%");
   bindRangeValue("visibleSize", "visibleSizeValue", "%");
+  syncWatermarkTextMeta();
+  syncDecodeExpectedMeta();
 
   [
     "hiddenStrength",
@@ -34,9 +40,17 @@ document.addEventListener("DOMContentLoaded", () => {
     "visibleOpacity",
     "visibleSize",
   ].forEach((id) => $(id).addEventListener("input", scheduleGenerate));
+  $("watermarkText").addEventListener("input", () => {
+    syncWatermarkTextMeta();
+    scheduleGenerate();
+  });
 
   ["decodeMethod", "decodeStrength"].forEach((id) => {
     $(id).addEventListener("input", scheduleDecode);
+  });
+  $("decodeExpectedText").addEventListener("input", () => {
+    syncDecodeExpectedMeta();
+    scheduleDecode();
   });
   bindRangeValue("decodeStrength", "decodeStrengthValue", "");
 
@@ -146,6 +160,7 @@ async function generateWatermarkedImage() {
     const preparedBlob = await prepareGeneratorInputBlob();
     const formData = new FormData();
     formData.append("image", preparedBlob, "prepared.png");
+    formData.append("watermark_text", getWatermarkText());
     formData.append("method", $("hiddenMethod").value);
     formData.append("scale", $("hiddenStrength").value);
     formData.append("max_side", $("outputMaxSide").value);
@@ -164,9 +179,12 @@ async function generateWatermarkedImage() {
     const outputSize = response.headers.get("X-Output-Size") || "未知尺寸";
     const method = response.headers.get("X-Watermark-Method") || $("hiddenMethod").value;
     const scale = response.headers.get("X-Watermark-Scale") || $("hiddenStrength").value;
+    const watermarkBits = response.headers.get("X-Watermark-Bits") || String(getWatermarkBytes() * 8);
+    $("decodeExpectedText").value = getWatermarkText();
+    syncDecodeExpectedMeta();
     setStatus(
       "generatorStatus",
-      `已使用 ShieldMnt/invisible-watermark 写入暗水印「${HIDDEN_WATERMARK_TEXT}」。算法：${method}，scale：${scale}，导出尺寸：${outputSize}。`
+      `已使用 ShieldMnt/invisible-watermark 写入自定义暗水印（${watermarkBits} bits）。算法：${method}，scale：${scale}，导出尺寸：${outputSize}。`
     );
     setDownloadState(true, null);
   } catch (error) {
@@ -190,6 +208,7 @@ async function decodeWatermark() {
 
     const formData = new FormData();
     formData.append("image", file, file.name);
+    formData.append("expected_text", getDecodeExpectedText());
     formData.append("method", $("decodeMethod").value);
     formData.append("scale", $("decodeStrength").value);
 
@@ -237,6 +256,7 @@ function renderDecodeResult(result) {
     `完整匹配：${result.exact_match ? "是" : "否"}`,
     `bit 相似度：${Math.round(result.bit_similarity * 100)}%`,
     `byte 相似度：${Math.round(result.byte_similarity * 100)}%`,
+    `长度：${result.watermark_bytes} bytes / ${result.watermark_bits} bits`,
     `算法：${result.method}`,
     `scale：${result.scale}`,
   ].join(" · ");
@@ -245,9 +265,37 @@ function renderDecodeResult(result) {
 
 function clearDecodeResult() {
   $("decodedText").textContent = "解析中...";
-  $("expectedText").textContent = HIDDEN_WATERMARK_TEXT;
+  $("expectedText").textContent = getDecodeExpectedText();
   $("decodeMeta").textContent = "";
   $("decodeResult").classList.remove("is-match");
+}
+
+function getWatermarkText() {
+  return $("watermarkText").value.trim();
+}
+
+function getDecodeExpectedText() {
+  return $("decodeExpectedText").value.trim();
+}
+
+function getWatermarkBytes() {
+  return utf8ByteLength(getWatermarkText());
+}
+
+function syncWatermarkTextMeta() {
+  const bytes = getWatermarkBytes();
+  $("watermarkTextMeta").textContent = `${bytes}/${MAX_WATERMARK_BYTES} UTF-8 bytes；内容越短，SNS 压缩后越稳。`;
+  $("watermarkTextMeta").classList.toggle("is-error", bytes === 0 || bytes > MAX_WATERMARK_BYTES);
+}
+
+function syncDecodeExpectedMeta() {
+  const bytes = utf8ByteLength(getDecodeExpectedText());
+  $("decodeExpectedMeta").textContent = `${bytes}/${MAX_WATERMARK_BYTES} UTF-8 bytes；解析必须知道写入内容的字节长度。`;
+  $("decodeExpectedMeta").classList.toggle("is-error", bytes === 0 || bytes > MAX_WATERMARK_BYTES);
+}
+
+function utf8ByteLength(value) {
+  return textEncoder.encode(value).length;
 }
 
 function loadImage(file) {

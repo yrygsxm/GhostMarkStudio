@@ -252,6 +252,30 @@ h2 {
   line-height: 1.35;
 }
 
+.controls label.wide {
+  grid-column: 1 / -1;
+}
+
+.controls textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+  border: 1px solid rgba(16, 34, 56, 0.14);
+  border-radius: 16px;
+  padding: 0.85rem;
+  color: var(--ink);
+  background: #fffaf1;
+  line-height: 1.55;
+}
+
+.controls small {
+  color: var(--muted);
+}
+
+.controls small.is-error {
+  color: #a83118;
+}
+
 .controls output {
   color: var(--accent);
   font-family: "Avenir Next", sans-serif;

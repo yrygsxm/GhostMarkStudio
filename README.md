@@ -2,7 +2,7 @@
 
 A lightweight web tool for embedding and decoding robust invisible image watermarks with optional visible branding.
 
-轻量 Python 服务 + 前端网页。暗水印底层使用开源项目 [ShieldMnt/invisible-watermark](https://github.com/ShieldMnt/invisible-watermark)，前端负责图片上传、可选可视透明水印叠加、预览和下载。
+轻量 Python 服务 + 前端网页。暗水印底层使用开源项目 [ShieldMnt/invisible-watermark](https://github.com/ShieldMnt/invisible-watermark)，前端负责图片上传、自定义暗水印内容、可选可视透明水印叠加、预览和下载。
 
 ## 本地运行
 
@@ -17,10 +17,11 @@ python server.py
 
 ## 实现要点
 
-- 暗水印固定写入 `https://t.me/AppDoDo/  APPDO数字生活指南`，UTF-8 后为 46 bytes / 368 bits。
+- 暗水印内容可在页面自由填写，后端按 UTF-8 bytes 写入频域水印。
+- 默认内容为 `https://t.me/AppDoDo/  APPDO数字生活指南`；当前限制为 128 UTF-8 bytes，内容越短，压缩后越稳。
 - 后端调用 `imwatermark.WatermarkEncoder` 和 `imwatermark.WatermarkDecoder`。
-- 默认算法为 `dwtDct`。SNS 增强模式会写入亮度+色度通道，并在小图上自动放大到更适合频域水印的尺寸。
-- 解析端会自动尝试常用算法/scale 组合，并显示完整匹配、bit 相似度和 byte 相似度。
+- 默认算法为 `dwtDctSvd`。SNS 增强模式会写入亮度+色度通道，并在小图上自动放大到更适合频域水印的尺寸。
+- 解析端需要填写写入时的同一段内容，用它确定解码 bit 长度；随后会自动尝试常用算法/scale 组合，并显示完整匹配、bit 相似度和 byte 相似度。
 - 可视水印使用 `assets/appdo-visible-watermark.svg`，默认低透明度、小尺寸、斜向平铺。
 
 ## 限制
